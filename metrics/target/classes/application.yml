@@ -1,0 +1,29 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST:localhost}:9092
+    consumer:
+      group-id: my-group-id
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+  data:
+    mongodb:
+      # uri: mongodb://localhost:27017/auth
+      uri: mongodb://${MONGO_HOST:localhost}:27017/urlMetrics
+
+url-metrics:
+  url-topic: url-tp
+  metric-topic: metrics-tp
+  jwt:
+        secret: lkajdflasjdflaksjdflasjdflajsdflkasjdflasjflajsdlfkadsjlfajsdlfkjaldfjlasdjf
+
+
+# spring.kafka.bootstrap-servers=localhost:9092
+# spring.kafka.consumer.group-id=your-group-id
+# spring.kafka.consumer.auto-offset-reset=earliest
+# spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
+# spring.kafka.consumer.value-deserializer=org.apache.kafka.common.serialization.StringDeserializer

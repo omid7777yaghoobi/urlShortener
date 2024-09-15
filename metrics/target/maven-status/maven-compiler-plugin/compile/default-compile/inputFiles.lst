@@ -1,0 +1,6 @@
+/home/omid/projects/urlShortener/metrics/src/main/java/com/example/metrics/MetricsApplication.java
+/home/omid/projects/urlShortener/metrics/src/main/java/com/example/metrics/config/MongoConfig.java
+/home/omid/projects/urlShortener/metrics/src/main/java/com/example/metrics/controller/UrlMetricsController.java
+/home/omid/projects/urlShortener/metrics/src/main/java/com/example/metrics/model/UrlMetrics.java
+/home/omid/projects/urlShortener/metrics/src/main/java/com/example/metrics/repository/UrlMetricsRepository.java
+/home/omid/projects/urlShortener/metrics/src/main/java/com/example/metrics/service/KafkaConsumerService.java
