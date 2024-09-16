@@ -1,7 +1,9 @@
-package com.example.urlShortener;
+package com.example.urlShortener.controller;
+
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import io.jsonwebtoken.Claims;
 import io.seruco.encoding.base62.Base62;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -19,9 +22,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.view.RedirectView;
 
+import com.example.urlShortener.model.addUrlRequestBody;
+import com.example.urlShortener.model.Url;
 import com.example.urlShortener.model.UrlMessage;
+import com.example.urlShortener.repository.UrlRepository;
+import com.example.urlShortener.service.UrlService;
 
 
 @Slf4j
@@ -31,22 +37,46 @@ public class UrlController {
   @Autowired
   private UrlRepository urlRepository;
 
-
   @Value("${url-shortener.url-topic}")
   private String urlTopic;
 
   @Autowired
   private KafkaTemplate<String, UrlMessage> kafkaTemplate;
 
+  @Autowired
+  private UrlService urlService;
+
 
   @GetMapping(path="/u/{urlString}")
-  public RedirectView getOriginalUrl(@PathVariable("urlString") String urlString) {
+  public ResponseEntity<?> getOriginalUrl(@PathVariable("urlString") String urlString) {
 
     String server_addr = "127.0.0.1:8080/u/";
-    List<Url> url_list = urlRepository.findByShortUrl(server_addr + urlString); 
-    String original_url = url_list.get(0).getOriginalUrl();
+    Optional<Url> url_data = urlRepository.findByShortUrl(server_addr + urlString); 
+    if (url_data.isPresent()) {
+      String original_url = url_data.get().getOriginalUrl();
 
-    return new RedirectView("http://" + original_url);
+      HttpHeaders headers = new HttpHeaders();
+      headers.add("Location", "http://" + original_url);
+      return new ResponseEntity<>(headers, HttpStatus.FOUND);
+    }
+
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Error: Url not found"); 
+  }
+
+  @PostMapping(path="/api/url/{urlString}/deactivate")
+  public ResponseEntity<?> deactivateUrl(@PathVariable("urlString") String urlString) {
+    try {
+      String server_addr = "127.0.0.1:8080/u/";
+
+      boolean success = urlService.deactivateUrl(server_addr + urlString);
+      if (success) {
+          return ResponseEntity.ok("URL deactivated successfully.");
+      }
+
+      return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Error: Url not found");
+    } catch (Exception e) {
+      return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error: Internal server error");
+    }
   }
 
   @GetMapping(path="/api/url")
@@ -55,7 +85,7 @@ public class UrlController {
     try {
       String owner = claims.getSubject(); 
 
-      List<Url> url_list = urlRepository.findByOwner(owner);
+      List<Url> url_list = urlService.getUrlsByOwner(owner);
       return ResponseEntity.ok(url_list);
     } catch (Exception e) {
       log.error("Internal Server Error: {}", e.getMessage());
@@ -75,19 +105,12 @@ public class UrlController {
         String base62Encoded = new String(encoded);
         String urlId = base62Encoded.substring(0, 7);
         String shortUrl = "127.0.0.1:8080/u/" + urlId;
-        // String shortUrl = base62Encoded.substring(0, 7);
-      
-        Url url = new Url();
-        url.setOriginalUrl(origUrl.getUrl());
-        url.setShortUrl(shortUrl);
-        url.setOwner(owner);
-        Url created_url = urlRepository.save(url);
-        
+
+        Url created_url = urlService.createUrl(origUrl.getUrl(), shortUrl, owner, true);       
 
         UrlMessage urlMessage = new UrlMessage(urlId, owner);
         kafkaTemplate.send(urlTopic, urlMessage);
         
-        // return ResponseEntity.ok(created_url.getShortUrl());
         return ResponseEntity.ok(Map.of("short_url", created_url.getShortUrl()));
     } catch (DataIntegrityViolationException e) {
         String errorMessage = e.getMostSpecificCause().getMessage();
@@ -95,9 +118,9 @@ public class UrlController {
         if (errorMessage.contains(originalUrl)) {
           return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error: Original URL already exists.");
         }
-        // Unique constraint violation - handle the duplicate password scenario
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Error: url Creation failed.");
     } catch (Exception e) {
+        log.error("url creation failed: {}", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error: Url creation failed.");
     }
   }

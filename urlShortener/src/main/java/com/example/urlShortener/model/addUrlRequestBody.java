@@ -1,4 +1,5 @@
-package com.example.urlShortener;
+package com.example.urlShortener.model;
+
 
 public class addUrlRequestBody {
     private String url;
