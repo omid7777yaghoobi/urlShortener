@@ -1,95 +1,65 @@
 package com.example.metrics.service;
 
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.metrics.model.UrlMetrics;
 import com.example.metrics.repository.UrlMetricsRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.List;
-import java.util.Optional;
-
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
-import org.springframework.http.ResponseEntity;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
+
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class KafkaConsumerService {
 
     private final UrlMetricsRepository urlMetricsRepository;
     private final ObjectMapper objectMapper;
+    private final MongoTemplate mongoTemplate;
 
-    // @Value("${url-metrics.url-topic}")
-    // private static String urlTopic;
-    
-    // @Value("${url-metrics.metric-topic}")
-    // private static String metricTopic;
-    
-    
-    private static final String urlTopicName = "url-tp";
-    private static final String metricTopicName = "metrics-tp";
-
-
-    public KafkaConsumerService(UrlMetricsRepository urlMetricsRepository, ObjectMapper objectMapper) {
-        this.urlMetricsRepository = urlMetricsRepository;
-        this.objectMapper = objectMapper;
-    }
-
-    @KafkaListener(topics = urlTopicName, groupId = "my-group-id")
+    @KafkaListener(topics = "${url-metrics.url-topic}", groupId = "my-group-id")
     public void consume(String message) {
         try {
 
-            System.out.println("a new url message Received: " + message);
+            log.info("New Url Message Received: {}", message);
 
-            // Convert the received JSON string to a UrlData object
-            UrlMetrics urlMetrics = objectMapper.readValue(message, UrlMetrics.class);
-            
-            // Initialize the hit count
+            UrlMetrics urlMetrics = objectMapper.readValue(message, UrlMetrics.class);            
             urlMetrics.setHitCount(0);
-
-            // Save the UrlData object to MongoDB
             urlMetricsRepository.save(urlMetrics);
 
-            // System.out.println("Saved to MongoDB: " + urlMetrics);
             log.info("Saved to MongoDB: ", urlMetrics);
 
         } catch (Exception e) {
             e.printStackTrace();
             log.error("Failed to process url message: {}", message);
-            // System.err.println("Failed to process message: " + message);
         }
     }
 
-    @KafkaListener(topics = metricTopicName, groupId = "my-group-id")
+    @KafkaListener(topics = "${url-metrics.metric-topic}", groupId = "my-group-id")
     public void consumeMetrics(String message) {
         try {
+            log.info("New Metric Message Received: {}", message);
 
-            System.out.println("a new metric message Received: " + message);
-
-            // Convert the received JSON string to a UrlData object
-            // UrlMetrics urlMetrics = objectMapper.readValue(message, UrlMetrics.class);
-            
-            // Initialize the hit count
-            // urlMetrics.setHitCount(0);
-            Optional<UrlMetrics> optionalUrlMetrics = urlMetricsRepository.findByShortUrl(message);
-            if (optionalUrlMetrics.isPresent()) {
-                // return found_url_list.get(0);
-                UrlMetrics urlMetrics = optionalUrlMetrics.get();
-                urlMetrics.setHitCount(urlMetrics.getHitCount() + 1);
-                urlMetricsRepository.save(urlMetrics);
-            } else {
-                log.error("short url not found");
-                // System.err.println("short url not found.");
-            }
+            incrementHitCountByShortUrl(message);
 
         } catch (Exception e) {
             e.printStackTrace();
             log.error("Failed to process metric message: {}", message);
-            // System.err.println("Failed to process metric message: " + message);
         }
+    }
+
+    private void incrementHitCountByShortUrl(String shortUrl) {
+        Query query = new Query(Criteria.where("shortUrl").is(shortUrl));
+        Update update = new Update().inc("hitCount", 1);
+
+        mongoTemplate.findAndModify(query, update, UrlMetrics.class);
     }
 }
